@@ -1,31 +1,53 @@
+---
+title: "Spotify Audio-Feature Explorer"
+author: "Mark Ruiz"
+output: pdf_document
+---
 
-## Load necessary packages and read in Spotify attribute data
+```{r setup, include=FALSE}
+rm(list = ls())
+if (!is.null(dev.list())) dev.off()
+
+knitr::opts_chunk$set(message = FALSE, warning = FALSE, fig.align = 'center')
+library(tidyverse); library(tidytext); library(psych); library(mclust); library(cluster); library(dplyr)
+root <- "~/Spotify-Clustering/"
+set.seed(12345)
+```
+
+# 1. Why this project?
+
+Spotify provides **language-agnostic “audio DNA” — 10 numerical features describing every track’s sonic profile** (e.g., acousticness, energy, danceability).  
+
+This project applies unsupervised learning (PCA and clustering) to reveal structure and trends in sonic clusters.
+
+### Objectives:
+
+- **Reduce** the raw 10-dimensional space to easy-to-interpret axes using **Principal Component Analysis (PCA)** — clarifying what acoustic features really drive variation across tracks.
+- **Cluster** tracks to detect **natural sonic groupings** that reflect how songs sound rather than who made them or what genre label they were given. They can then be visualized in this reduced space.
+- **Diagnose** these clusters with respect to popularity, artist/track metadata, and genre mix — understanding coherence, business relevance, and limitations.
+- **Prepare for interactive exploration**: Results power a **Shiny dashboard** where PMs and curators can visualize, query, and manipulate clusters to support playlist curation and editorial design.
+
+> **Business use-case:** This analysis helps **product managers (PMs)** at streaming platforms and music apps to **automatically curate distinct playlists using measurable audio features** (e.g., energy, acousticness, danceability) — not just genre tags.  
+
+> It enables faster playlist creation, allows teams to fine-tune recommendations for different moods or contexts (like workout vs. relaxation), and provides an explainable framework for why tracks are grouped together — e.g., what makes a song belong in a “mellow pop” mix versus a “Latin EDM party.”
+
+---
+in
+**Key deliverable:**  
+A descriptive diagnostic that not only highlights clear, actionable clusters, but also transparently communicates which groups are coherent vs. candidates for refinement, alongside an interactive Shiny app dashboard.
+
+## Read in Spotify attribute data
 
 ```{r}
 # Load necessary packages and read in df
-
-library(tidyverse)
-
-library(mclust)
-
-library(psych)
-
-library(cluster)
-
-library(dplyr)
-
-df <- read.csv("/kaggle/input/spotify-data/SpotifyFeatures.csv", header=TRUE)
-
-set.seed(12345)
+df <- read.csv(file.path(root,"data/spotifyfeatures.csv"), header=TRUE)
 ```
 
 ```{r}
 # Examine data
-
 head(df)
 
 # Remove duplicated tracks that could result in skewing
-
 df <- df[!duplicated(df$track_id), ]
 ```
 
@@ -34,93 +56,54 @@ df <- df[!duplicated(df$track_id), ]
 
 ```{r}
 # Remove non numerical variables
-
 df_ready_for_pca <- df[, !names(df) %in% c('popularity','genre', 'artist_name', 'track_name', 'track_id', 'key', 'mode', 'time_signature')]
 
-
-
 # Examine Data
-
 head(df_ready_for_pca)
 ```
-
-
 Since the units are incommensurate, we choose to standardize the dataset to variables with large variances (such as duration_ms and tempo) do not dominate
 
 ```{r}
 data_scaled <- scale(df_ready_for_pca)
 ```
 
-
 ## Determine number of principal components
-
-
-First, I will observe the scree plot of the correlation matrix of the standarize data and use the elbow method to identify the number of components. 
+First, I will observe the scree plot of the correlation matrix of the standardized data and use the elbow method to identify the number of components.
 
 ```{r}
 # Plot PCA results
-
 scree(cor(data_scaled), factors=FALSE)
 ```
-
-
-Kaiser Criterion suggests 3 factors, but since component 4 has a eigenvalue close to 1, we will investigate it aswellBased on this, it seems we will need 3 components. Furthermore, utilizing the Kaiser Criterion, we can see that 3 components have eigenvalues greater than 1, suggesting we will need 3 components. However, since the four component has an eigenvalue close to 1, I will also investigate it to see if the loadings are better.
-
+Utilizing the Kaiser Criterion, we can see that 3 components have eigenvalues greater than 1, suggesting we will need 3 components. However, since the fourth component has an eigenvalue close to 1, I will also investigate it to see if the loadings are better. Also, visually, by looking at the elbow of the scree plot, we can see that it appears at 3 components.
 
 #### 1 Factor
-
 ```{r}
 # 1 factor: 
-
 fa_result <- factanal(data_scaled, factors = 1, rotation = "varimax")
-
 print(fa_result, cutoff=0.3, digits=3, sort=TRUE)
-
-
 
 pca_result <- principal(data_scaled, nfactors=1, rotate="varimax")
-
 print(pca_result$loadings, cutoff=0.4, digits=3, sort=TRUE)
 
-
-
 # For correlation
-
 model2 <- principal(data_scaled, nfactors = 1, rotate = 'promax')
 
-
-
 # Correlation for promax
-
 cor(model2$scores)
 ```
-
-
 #### 2 Factor
-
 ```{r}
 # 2 factor: 
-
 fa_result <- factanal(data_scaled, factors = 2, rotation = "varimax")
-
 print(fa_result, cutoff=0.3, digits=3, sort=TRUE)
 
-
-
 pca_result <- principal(data_scaled, nfactors=2, rotate="varimax")
-
 print(pca_result$loadings, cutoff=0.35, digits=3, sort=TRUE)
 
-
-
 # For correlation
-
 model2 <- principal(data_scaled, nfactors = 2, rotate = 'promax')
 
-
-
 # Correlation for promax
-
 cor(model2$scores)
 ```
 
@@ -129,27 +112,16 @@ cor(model2$scores)
 
 ```{r}
 # 3 factor: 
-
 fa_result <- factanal(data_scaled, factors = 3, rotation = "varimax")
-
 print(fa_result, cutoff=0.3, digits=3, sort=TRUE)
-
 pca_result <- principal(data_scaled, nfactors=3, rotate="varimax")
-
 print(pca_result$loadings, cutoff=0.4, digits=3, sort=TRUE)
 
-
-
 # For correlation
-
 model2 <- principal(data_scaled, nfactors = 3, rotate = 'promax')
-
 print(model2$loadings, cutoff=0.3, digits=3, sort=TRUE)
 
-
-
 # Correlation for promax
-
 cor(model2$scores)
 ```
 
@@ -158,29 +130,16 @@ cor(model2$scores)
 
 ```{r}
 # 4 factor: 
-
-
-
 fa_result <- factanal(data_scaled, factors = 4, rotation = "varimax")
-
 print(fa_result, cutoff=0.3, digits=3, sort=TRUE)
 
-
-
 pca_result <- principal(data_scaled, nfactors=4, rotate="varimax")
-
 print(pca_result$loadings, cutoff=0.4, digits=3, sort=TRUE)
 
-
-
 # For correlation
-
 model2 <- principal(data_scaled, nfactors = 4, rotate = 'promax')
 
-
-
 # Correlation for promax
-
 cor(model2$scores)
 ```
 
@@ -189,151 +148,97 @@ cor(model2$scores)
 
 ```{r}
 # 5 factor: 
-
 fa_result <- factanal(data_scaled, factors = 5, rotation = "varimax")
-
 print(fa_result, cutoff=0.3, digits=3, sort=TRUE)
 
-
-
 pca_result <- principal(data_scaled, nfactors=5, rotate="varimax")
-
 print(pca_result$loadings, cutoff=0.4, digits=3, sort=TRUE)
-
-
-
 # For correlation
-
 model2 <- principal(data_scaled, nfactors = 5, rotate = 'promax')
 
-
-
 # Correlation for promax
-
 cor(model2$scores)
 ```
-
-
 #### Conduct VSS complexit and MAP tests
-
 ```{r}
 # Conduct the MAP test via the VSS function
-
 vss_result <- VSS(data_scaled, n = 8, rotate = "varimax", fm = "ml")
-
-
-
 print(vss_result)
-
-
-
 summary(vss_result)
 ```
 
 ```{r}
 fa_result <- factanal(data_scaled[, -c(5)], factors = 3, rotation = "varimax")
-
 print(fa_result, cutoff=0.3, digits=3, sort=TRUE)
-
-
-
 pca_result <- principal(data_scaled[, -c(5)], nfactors=3, rotate="varimax")
-
 print(pca_result$loadings, cutoff=0.4, digits=3, sort=TRUE)
 
-
-
 # For correlation
-
 model2 <- principal(data_scaled[, -c(5)], nfactors = 3, rotate = 'promax')
 
-
-
 # Correlation for promax
-
 cor(model2$scores)
 ```
+### Why We Chose Three Components
 
+We ran PCA with both varimax and promax rotations and saw that the first three factors stood out cleanly. Promax correlations between those three were tiny—meaning they’re essentially independent. When we tried a fourth factor, it just picked up noise (single-variable “stubs”) and barely raised our explained variance <11%, so we stuck with three.The VSS and MAP tests suggest a dimensionality between 1 and 3 factors, with VSS peaking at 3 factors and MAP favoring 1, while BIC suggests 5 factors. My PCA solution using 3 components aligns well with VSS guidance and captures the key structure while balancing simplicity and interpretability.
 
-Given the loadings from the principal component analysis (PCA) with both varimax and oblique (promax) rotations for three factors, and the low promax correlations suggesting independence among factors. Although a fourth factor was considered, it led to overfactoring, with two components being dominated by single variables, diminishing interpretability without significantly increasing cumulative variance explained.
+### Principal Components Interpretation
 
+This PCA reduces 10 Spotify audio features to **three interpretable axes that explain approximately 63% of the total variance**.  
+Each component represents a distinct sonic dimension that maps naturally onto real-world curation and recommendation strategies.
 
-##### Principal Component 1: Acoustic and Energy Dynamics
+#### Component 1: Acoustic vs. Energy Dynamics  
+- **Top loadings:**  
+  - High positive: energy, loudness, tempo, instrumentalness  
+  - High negative: acousticness  
+- **Interpretation:**  
+  This axis captures a spectrum from soft, acoustic, unplugged music to loud, high-energy, electrified anthems.  
+  Tracks at the “acoustic” end are gentle, organic, and quieter; tracks at the “energy” end are powerful, amplified, and tempo-driven.
+- **Business relevance:**  
+  A key dial for curating playlists or recommendations based on intensity; useful for distinguishing “chill” background playlists from high-energy workout or party mixes.
 
-###### Variables:
+---
 
-Highly correlated with 'energy', 'loudness', 'acousticness' (negatively), and to a lesser extent, 'tempo' and 'instrumentalness'.
+#### Component 2: Live & Spoken Feel  
+- **Top loadings:**  
+  - High positive: liveness, speechiness  
+- **Interpretation:**  
+  This axis differentiates polished studio recordings from raw live performances and spoken-word content.  
+  Tracks scoring high include concert recordings, stand-up comedy, and podcast-style audio; tracks scoring low are studio-produced and polished.
+- **Business relevance:**  
+  Enables surfacing of live versions, audience recordings, or podcast-like material; valuable for products emphasizing authenticity or live event experiences.
 
+---
 
+#### Component 3: Feel-Good Groove  
+- **Top loadings:**  
+  - High positive: danceability, valence (happiness)  
+  - High negative: duration  
+- **Interpretation:**  
+  This axis distinguishes short, upbeat, danceable tracks from longer, slower, moodier pieces.  
+  High scorers tend to be happy, concise bangers; low scorers include extended ballads and atmospheric works.
+- **Business relevance:**  
+  Particularly useful for curating content that maximizes mood and energy—ideal for retail environments, events, or fitness playlists.
 
-###### Description:
+---
 
-This component emphasizes the contrast between acoustic and electronic elements in music, capturing the dynamic range from soft, more natural sounds to energetic, amplified productions. It mirrors the balance between acoustic purity and the vibrancy of electronic music.
+### Summary of PCA Insights
 
+- **Three interpretable, independent axes cover ≈63% of total variance**, providing a strong explanatory foundation without overcomplication.
+- **Each axis aligns to intuitive product dimensions:**  
+  1. Intensity (Acoustic vs. Energy)  
+  2. Context/format (Studio vs. Live/Spoken)  
+  3. Mood/pace (Long & moody vs. upbeat/danceable)
+- **These dimensions power the forthcoming Shiny dashboard**, enabling PMs and curators to explore and filter Spotify content interactively by clear, explainable acoustic criteria.
 
+This dimensionality reduction transforms Spotify’s abstract audio feature space into a business-ready, human-interpretable framework for playlist curation, editorial tooling, and consumer-facing features.
 
-###### Business Implications:
-
-For music producers and platforms, understanding this balance is crucial for curating content that appeals to diverse listener preferences, from acoustic serenity to high-energy beats. It can guide playlist curation for varying activities and moods, from relaxation to intense workouts.
-
-
-
-##### Principal Component 2: Expressiveness and Live Experience
-
-###### Variables:
-
-Primarily associated with 'liveness' and 'speechiness', indicating tracks with live performance features and spoken word content.
-
-
-
-###### Description:
-
-This component distinguishes tracks with the authentic feel of live performances and spoken elements, potentially including live concerts, stand-up comedy, or spoken-word poetry, highlighting the human and immediate aspect of these recordings.
-
-
-
-###### Business Implications:
-
-This insight is invaluable for event organizers, streaming services, and radio programmers to design experiences that resonate with audiences seeking the genuine and unedited expressions of artists. It aids in promoting live event recordings and spoken word content to target demographics.
-
-
-
-##### Principal Component 3: Rhythmic and Emotional Depth
-
-###### Variables:
-
-Tied to 'danceability', 'valence' (positivity), and negatively with 'duration_ms', suggesting a preference for shorter, upbeat, and emotionally positive tracks.
-
-
-
-###### Description:
-
-This component captures the essence of rhythm and mood in music, favoring tracks that are both danceable and emotionally uplifting. The negative association with 'duration_ms' suggests a lean towards more concise, impactful musical experiences.
-
-
-
-###### Business Implications:
-
-For marketers and playlist curators, this component underscores the importance of selecting tracks that boost listener mood and encourage movement, ideal for settings that aim to uplift or energize, such as parties, fitness classes, or retail spaces looking to enhance the shopping experience.
-
-
-
-#### Conclusion:
-
-
-
-For businesses, the nuanced understanding furnished by this model enables targeted strategic decisions in content curation, marketing, and customer experience. Streaming services, for instance, can refine recommendation algorithms with these insights, curating engaging and contextually resonant playlists. Venues and retailers, too, can utilize the emotional and energetic insights to craft ambient music experiences that align with customer moods and preferences, fostering an engaging atmosphere.
-
-
-
-In sum, the adjusted three-factor model stands as a robust analytical framework for leveraging distinctive music characteristics. This approach not only enriches user experience but also underpins varied business applications, aiding in the strategic deployment of music to meet business objectives and enhance customer engagement.
-
+---
 
 ## Clustering
 
-
 #### View Principal Components Plots
-
 
 Next I will view the plots of the principal components and see if I can identify any obvious shapes or clusters. This will guide my choice of clustering method to use.
 
@@ -341,46 +246,75 @@ Next I will view the plots of the principal components and see if I can identify
 # Plot the first principal component against the second
 
 plot(pca_result$scores[,1], pca_result$scores[,2],
-
      xlab="First Principal Component",
-
      ylab="Second Principal Component",
-
      main="PCA: Component 1 vs Component 2")
 
-
-
 plot(pca_result$scores[,1], pca_result$scores[,3],
-
      xlab="First Principal Component",
-
      ylab="Third Principal Component",
-
      main="PCA: Component 1 vs Component 3")
 
-
-
 plot(pca_result$scores[,2], pca_result$scores[,3],
-
      xlab="Second Principal Component",
-
      ylab="Third Principal Component",
-
      main="PCA: Component 2 vs Component 3")
 ```
 
 ```{r}
 par(mar=c(8, 8, 8, 8) , cex.main=2, cex.lab=1.5, cex.axis=1.5)
-
-
-
 mclust_result <- Mclust(data_scaled)
-
-
-
 plot(mclust_result, what = "BIC")
-
 summary(mclust_result)
+```
+
+```{r}
+## Cluster cohesion & separation
+# 1. Attach cluster labels
+df$cluster <- mclust_result$classification
+
+# 2. Track counts per cluster
+df %>% count(cluster, name = "tracks") %>%
+  knitr::kable(
+    caption = "Number of tracks in each cluster"
+  )
+
+# 3. Compute overall variance (mean squared distance to global centroid)
+overall_var <- mean(
+  rowSums((data_scaled - colMeans(data_scaled))^2)
+)
+
+# 4. Compute within-cluster variance
+#    We pull each cluster’s rows into a matrix, compute its centroid, 
+#    then average squared distances back to that centroid.
+data_clu <- as_tibble(data_scaled) %>% mutate(cluster = df$cluster)
+
+within_var <- data_clu %>%
+  group_by(cluster) %>%
+  summarise(
+    within_var = {
+      m <- as.matrix(select(cur_data(), -cluster))
+      cent <- colMeans(m)
+      mean(rowSums((m - cent)^2))
+    },
+    .groups = "drop"
+  ) %>%
+  mutate(ratio_vs_overall = round(within_var / overall_var, 2))
+
+# 5. Display tidy table
+within_var %>%
+  knitr::kable(
+    col.names = c("Cluster", "Within-Cluster Var", "Ratio vs Overall"),
+    caption   = "Within-cluster variance compared to overall variance"
+  )
+```
+
+
+```{r}
+pairs(as.data.frame(mclust_result$z)[,1:3],
+      pch = 20, col = df$cluster,
+      main = "Nine clusters in PC space")
+
 ```
 
 ```{r}
@@ -390,227 +324,318 @@ plot(mclust_result, what = "classification")
 ```
 
 ```{r}
+# ── Cluster means and standard deviations ───────────────────────────────
 classification <- mclust_result$classification
 
+# Compute per-cluster means and standard deviations
+cluster_means <- aggregate(data_scaled,
+                           by = list(cluster = classification),
+                           FUN = mean)
+cluster_std   <- aggregate(data_scaled,
+                           by = list(cluster = classification),
+                           FUN = sd)
 
-
-cluster_means <- aggregate(data_scaled, by=list(cluster=classification), FUN=mean)
-
-cluster_std <- aggregate(data_scaled, by=list(cluster=classification), FUN=sd)
-
-
-
-cluster_means <- cluster_means[,-1]
-
-cluster_std <- cluster_std[,-1]
-
-
-
+# Display results with clear headings
+cat("=== Cluster Means (standardized features) ===\n")
 print(round(cluster_means, 3))
 
-
-
+cat("\n=== Cluster Standard Deviations (standardized features) ===\n")
 print(round(cluster_std, 3))
+
+```
+
+
+```{r}
+knitr::kable(round(cluster_means, 2), caption = "Cluster Means (z-scores)")
+```
+
+```{r}
+knitr::kable(round(cluster_std, 2), caption = "Cluster Std")
 ```
 
 ```{r}
 df$cluster <- mclust_result$classification
-
-
-
-genre_frequency <- table(df$cluster, df$genre)
-
-
-
-genre_frequency_df <- as.data.frame(genre_frequency)
-
-
-
-colnames(genre_frequency_df) <- c("Cluster", "Genre", "Frequency")
-
-
-
-top_genres_per_cluster <- genre_frequency_df %>%
-
-  group_by(Cluster) %>%
-
-  arrange(desc(Frequency)) %>%
-
-  slice_head(n = 2) %>%
-
-  ungroup()
-
-
-
-print(top_genres_per_cluster)
 ```
 
 
-##### Cluster 1: Subdued Acoustic
+```{r}
+df %>% 
+  count(cluster, genre) %>% 
+  group_by(cluster) %>% slice_max(n, n = 5) %>% ungroup() %>% 
+  ggplot(aes(reorder_within(genre, n, cluster), n, fill = factor(cluster)))+
+  geom_col(show.legend = FALSE)+coord_flip()+
+  facet_wrap(~cluster, scales = "free_y")+
+  scale_x_discrete()+theme_minimal()+
+  labs(title = "Top-5 Genres per Cluster", x = NULL, y = "Count")
+
+```
+```{r}
+df %>% 
+  count(cluster, artist_name) %>% 
+  group_by(cluster) %>% slice_max(n, n = 6) %>% ungroup() %>% 
+  ggplot(aes(reorder_within(artist_name, n, cluster), n, fill = factor(cluster)))+
+  geom_col(show.legend = FALSE)+coord_flip()+
+  facet_wrap(~cluster, scales = "free_y")+
+  scale_x_discrete()+theme_minimal()+
+  labs(title = "Top-5 Most Frequent Artists per Cluster", x = NULL, y = "Count")
+```
+
+
+```{r}
+# ── SAVE PRE-COMPUTED ARTEFACTS FOR SHINY ──────────────────────────────
+# This chunk will (re)compute PCA + clustering if needed, then persist:
+#   • pca_result      (3‐factor PCA)
+#   • mclust_result   (GMM with 9 clusters)
+#   • scores_df       (PC scores + track_id + cluster)
+#   • df_with_cluster (original df + cluster label)
+
+dir.create(file.path(root, "models"), showWarnings = FALSE)
+
+# --- 1. Ensure PCA + clustering exist (uses data_scaled + df from earlier) ---
+if (!exists("pca_result")) {
+  pca_result <- principal(data_scaled, nfactors = 3, rotate = "varimax")
+}
+if (!exists("mclust_result")) {
+  # force 9 clusters as you validated
+  mclust_result <- Mclust(data_scaled, G = 9)
+}
+
+# --- 2. Build scores_df ------------------------------------------------------
+scores_df <- as_tibble(pca_result$scores, .name_repair = "unique") |>
+  set_names(c("PC1", "PC2", "PC3")) |>
+  mutate(
+    track_id = df$track_id,
+    cluster  = factor(mclust_result$classification)
+  )
+
+# --- 3. Persist artefacts ----------------------------------------------------
+saveRDS(pca_result,        file.path(root, "models/pca_result.rds"))
+saveRDS(mclust_result,     file.path(root, "models/mclust_result.rds"))
+saveRDS(scores_df,         file.path(root, "models/scores_df.rds"))
+saveRDS(df,                file.path(root, "models/df_with_cluster.rds"))
+
+message("✅ Artefacts written to ~/Spotify-Clustering/models/")
+
+```
+
+
+```{r}
+# ── Top-10 tracks *within each cluster* by popularity ──────────────────
+top10_by_cluster <- df %>%
+  group_by(cluster) %>%
+  slice_max(order_by = popularity, n = 10, with_ties = FALSE) %>%
+  ungroup() %>%
+  arrange(cluster, desc(popularity)) %>%
+  select(cluster,
+         artist  = artist_name,
+         track   = track_name,
+         popularity)
+
+print(top10_by_cluster, n = nrow(top10_by_cluster))
+```
+
+
+
+```{r}
+ggplot(df, aes(factor(cluster), popularity, fill = factor(cluster)))+
+  geom_violin(trim = FALSE)+geom_boxplot(width = .1, outlier.shape = NA)+
+  theme_minimal()+labs(title = "Popularity by Cluster", x = "Cluster")
+
+```
+
+## Cluster Diagnostics & Storytelling
+
+---
+
+### 📌 Overview
+
+We clustered approximately 177,000 Spotify tracks using a Gaussian Mixture Model (Mclust VEV, 9 clusters).  
+The goal: interpret each cluster’s sonic and genre profile, evaluate coherence (via within-cluster variance), and identify actionable business use cases.
+
+**Scope:**  
+This diagnostic answers questions about cluster quality, interpretability, and immediate business potential.  
+*Future refinement opportunities are explicitly flagged as "Future analysis".*
+
+---
+
+### 📊 Compactness Summary
+
+| Cluster | # Tracks | Variance Ratio vs. Overall | Interpretation |
+| ------- | -------- | --------------------------- | -------------- |
+| 1 | 37,059 | 0.50 | Tight, well-defined |
+| 2 | 27,493 | 0.99 | Acceptable |
+| 3 | 15,741 | 3.14 | High variance, poor cohesion|
+| 4 | 20,509 | 0.96 | Acceptable |
+| 5 | 35,869 | 0.82 | Good homogeneity |
+| 6 | 9,234  | 3.47 | Very high variance, poor cohesion|
+| 7 | 5,437  | 2.42 | High variance, weak cohesion|
+| 8 | 8,927  | 1.51 | Moderate dispersion |
+| 9 | 16,505 | 0.72 | Good homogeneity |
+
+🔔 **Interpretive caution required for Clusters 3, 6, 7 due to poor within-cluster cohesion.**
+
+---
+
+### 🔎 Cluster-by-Cluster Diagnostics
+
+#### Cluster 1 – Mellow-Pop Mainstream
+- **Compactness:** Good (0.50 ratio)  
+- **Sonic profile:** acousticness +0.18σ, danceability +0.26σ, energy −0.20σ  
+- **Genre profile:** Folk, Country, Blues, Movie soundtracks  
+- **Representative tracks:** "Sunflower", "Shallow"  
+- **Interpretation:** Soft, polished, radio-friendly pop  
+- **Business case:** Retail, cafés, mainstream chill playlists  
+- *Future analysis:* Check artist overlap with Cluster 9 (Post Malone shows up in both)
+
+---
+
+#### Cluster 2 – Midline Blend
+- **Compactness:** Acceptable (0.99 ratio)  
+- **Sonic profile:** All near 0 ⇒ numeric centroid  
+- **Genre profile:** Electronic, Jazz, Soundtrack  
+- **Representative tracks:** "bad idea", "Thunder"  
+- **Interpretation:** No clear stylistic theme; diverse content  
+- **Business case:** Control group or fallback general pop  
+- *Future analysis:* Assess artist diversity; are many unique artists driving heterogeneity?
+
+---
+
+#### Cluster 3 – Quiet Acoustic & Neo-Classical 🔔
+- **Compactness:** Poor (3.14 ratio)  
+- **Sonic profile:** acousticness +1.42σ, energy −1.54σ ⇒ very quiet, acoustic  
+- **Genre profile:** Classical, Soundtrack  
+- **Representative tracks:** "Avril 14th", Max Richter  
+- **Interpretation:** Calm/relaxation cluster but internally broad  
+- **Business case:** Focus, meditation, wellness playlists  
+- *Future analysis:* Inspect cross-genre artist spread; possible ambient sub-cluster split
+
+---
+
+#### Cluster 4 – Contemporary Rap & R&B
+- **Compactness:** Acceptable (0.96 ratio)  
+- **Sonic profile:** danceability +0.14σ, energy +0.16σ  
+- **Genre profile:** Hip-Hop primary; some Reggaeton, Opera  
+- **Representative tracks:** "7 rings", "God’s Plan"  
+- **Interpretation:** Chart-friendly hip-hop/R&B  
+- **Business case:** Urban retail, gym playlists  
+- *Future analysis:* Speechiness check vs. Cluster 6 (skits vs. songs)
+
+---
+
+#### Cluster 5 – High-Energy Latin / EDM Crossover
+- **Compactness:** Good (0.82 ratio)  
+- **Sonic profile:** energy +0.88σ, acousticness −1.00σ -> most energetic  
+- **Genre profile:** Dance, Ska, Alternative  
+- **Representative tracks:** "Con Calma", "Sweet but Psycho"  
+- **Interpretation:** Loud, synthetic dance and reggaetón  
+- **Business case:** Clubs, fitness, party playlists  
+- *Future analysis:* Compare tempo and artist profile vs. Cluster 9 (Dance-Pop)
+
+---
+
+#### Cluster 6 – Spoken-Word / Skit-Heavy
+- **Compactness:** Poor (3.47 ratio) -> most dispersed cluster  
+- **Sonic profile:** speechiness +3.81σ, liveness +2.44σ  
+- **Genre profile:** Comedy dominates  
+- **Representative tracks:** "I’m Not Racist", Eminem skits  
+- **Interpretation:** Spoken-word/dialogue cluster  
+- **Business case:** Podcasts, explicit content filters, lyric analysis tools  
+- *Future analysis:* Check artist spread; multiple artists may inflate variance
 
-###### Top Genre: Folk
+---
 
-###### Attributes:
+#### Cluster 7 – Long-Form Alt & Classic Rock
+- **Compactness:** Weak (2.42 ratio)  
+- **Sonic profile:** duration +0.92σ -> long tracks dominate  
+- **Genre profile:** Electronic, Jazz, Blues, Alt-Rock  
+- **Representative tracks:** "Whole Lotta Love", "bellyache"  
+- **Interpretation:** Length-driven more than style-driven  
+- **Business case:** Identify long-playback experiences  
+- *Future analysis:* Log-scale duration and inspect tempo × instrumentalness
 
-Moderate acousticness, danceability, and lower energy; quieter and less lively tracks.
+---
 
-###### Interpretation:
+#### Cluster 8 – Soft Ballads & Singer-Songwriter
+- **Compactness:** Moderate (1.51 ratio)  
+- **Sonic profile:** acousticness +1.40σ, danceability −1.13σ, energy −1.42σ  
+- **Genre profile:** Opera, Classical, Folk  
+- **Representative tracks:** "ocean eyes", "All of Me"  
+- **Interpretation:** Sentimental, stripped-back ballads  
+- **Business case:** Fine-dining, emotional scoring  
+- *Future analysis:* Gender balance analysis; valence polarity (uplifting vs. melancholic)
 
-Tracks in this cluster are likely mellow, perhaps suitable for reflective or intimate settings.
+---
 
-###### Business Use:
+#### Cluster 9 – Dance-Pop Hit Factory
+- **Compactness:** Good (0.72 ratio)  
+- **Sonic profile:** danceability +0.93σ, acousticness −0.60σ ⇒ club-ready  
+- **Genre profile:** Hip-Hop, Reggaeton, Dance, R&B  
+- **Representative tracks:** "thank u, next", "SICKO MODE"  
+- **Interpretation:** Dance-pop mainstream hits  
+- **Business case:** Brand-aligned playlists, mainstream radio curation  
+- *Future analysis:* Distinguish clearly from Cluster 5 via tempo and artist metadata
 
-Ideal for environments that require a calm and relaxing ambiance, like yoga studios or quiet cafes.
+---
 
+### 📋 Summary of Compactness and Interpretability
 
+- **Good homogeneity:** Clusters 1, 5, 9  
+- **Acceptable:** Clusters 2, 4  
+- **Moderate dispersion:** Cluster 8  
+- **Poor cohesion:** Clusters 3, 6, 7 ⇒ interpret carefully; candidates for refinement.
 
-##### Cluster 2: Instrumental and Calm
+---
 
-###### Top Genre: Jazz
+### Key takeaway:
 
-###### Attributes:
+- Clear and explainable clusters with business-aligned interpretation:  
+  - Retail-ready clusters (1, 5, 9)  
+  - Niche opportunities (3 for wellness, 6 for spoken word)  
+- Cluster Qualty Issue
+- Structured next-step recommendations clearly flagged and scoped.
 
-Average acousticness and instrumentalness, lower danceability, energy, and loudness.
+---
 
-###### Interpretation:
+Below we summarise what each interactive view in the Shiny app dashboard just revealed about the **nine sonic clusters** and how a hiring manager can leverage those findings.
 
-This cluster may contain calm instrumental or ambient tracks.
+---
 
-###### Business Use:
+### Q1 · Genre Mix  
+<small>*Top-5 genres per cluster bar-matrix*</small>
 
-Great for spaces where a peaceful or contemplative atmosphere is desired, such as art galleries or libraries.
+* Clusters **3 (Quiet Acoustic)** and **8 (Ballads)** are >70 % classical/folk singer-songwriter—perfect fodder for focus or relaxation playlists.  
+* **Cluster 5 (Latin / EDM)** is overwhelmingly *Dance* + *Alternative*—solid gym/party content.  
+* **Cluster 6 (Spoken-Word)** is the only group where *Comedy* appears at all ⇒ our GMM isolated speech-heavy tracks successfully.
 
+---
 
+### Q2 · Audio DNA (z-score radar)
 
-##### Cluster 3: Mellow and Melodic
+* **Cluster 6** spikes > +5 SD in **speechiness** and sits +1 SD in **liveness** → live monologues & skits.  
+* **Cluster 3** leads in **acousticness** (+2 SD) and is –1.5 SD on **energy**—consistent with soft-piano ambience.  
+* **Cluster 7** is +2 SD on **duration** but otherwise average, validating the “long-form alt-rock” label.
 
-###### Top Genre: Classical
+---
 
-###### Attributes:
+### Q3 · Popularity Distribution
 
-Very high acousticness and instrumentalness, very low danceability, energy, and loudness.
+| Highest median pop | 5 (Latin/EDM) & 9 (Dance-Pop) – both hover around 60-65. |
+| Lowest median pop  | 6 (Spoken-Word) – barely hits 40. |  
 
-###### Interpretation:
+**Implication:** energy-driven clusters attract larger audiences; speech-dominant content is niche but valuable for ad/podcast placement.
 
-Likely includes slow, melodic tracks, possibly with orchestral or acoustic instruments.
+---
 
-###### Business Use:
+### Q4 · Energy × Valence Cloud
 
-Suitable for environments that benefit from serene background music, like massage parlors or meditation centers.
+* No single cluster monopolises the “happy-and-energetic” corner (Valence > 0.8, Energy > 0.8) → sonic diversity exists even among hits.  
+* **Cluster 3** anchors the low-energy, low-valence quadrant → ideal for calm or sombre moments.
 
+---
 
+### Q5 · Duration × Tempo
 
-##### Cluster 4: Live and Energetic
+* Outliers beyond 10 min all belong to **Cluster 7** confirming the length-driven hypothesis.  
+* Tempo stays 60-180 BPM regardless of length, so **duration** (not tempo) is the discriminant for extended tracks.
 
-###### Top Genre: Hip-Hop
-
-###### Attributes:
-
-Above-average liveness and speechiness, with moderate energy.
-
-###### Interpretation:
-
-Tracks may include live recordings or songs with significant lyrics or spoken components.
-
-###### Business Use:
-
-Perfect for live venues and social settings where a sense of energy and engagement is beneficial.
-
-
-
-##### Cluster 5: Upbeat and Dynamic
-
-###### Top Genre: Alternative
-
-###### Attributes:
-
-Low acousticness with higher energy and loudness, suggesting more dynamic tracks.
-
-###### Interpretation:
-
-Potentially includes a mix of pop, rock, or dance music that's more energetic and lively.
-
-###### Business Use:
-
-Versatile for various commercial settings, such as retail shops, bars, or parties to energize the crowd.
-
-
-
-##### Cluster 6: Expressive and Intense
-
-###### Top Genre: Comedy
-
-###### Attributes:
-
-Very high liveness and extremely high speechiness, with moderate energy.
-
-###### Interpretation:
-
-Could consist of tracks with prominent live and spoken word elements, indicating intense expression.
-
-###### Business Use:
-
-Suitable for events that focus on performance arts, spoken word, or other live expressions.
-
-
-
-##### Cluster 7: Instrumental Focus
-
-###### Top Genre: Electronic
-
-###### Attributes:
-
-Longer duration, high instrumentalness, and moderate liveness.
-
-###### Interpretation:
-
-Tracks might be longer instrumental pieces, perhaps with live performance elements.
-
-###### Business Use:
-
-Good for background ambiance where distraction should be minimal, like study spaces or bookstores.
-
-
-
-##### Cluster 8: Calm and Melancholic
-
-###### Top Genre: Opera
-
-###### Attributes:
-
-High acousticness, low danceability and energy, and very low loudness.
-
-###### Interpretation:
-
-May include genres like classical or soft indie, with melancholic or somber tones.
-
-###### Business Use:
-
-Fitting for spaces requiring subdued music, such as fine dining restaurants or quiet waiting areas.
-
-
-
-##### Cluster 9: Popularity and Tempo
-
-###### Top Genre: Hip-Hop
-
-###### Attributes:
-
-Lower acousticness, high danceability, and moderate tempo and loudness.
-
-###### Interpretation:
-
-Likely includes popular music genres that are catchy and designed for broad appeal.
-
-###### Business Use:
-
-Ideal for commercial environments aiming to create a mainstream appeal, like malls or casual dining.
-
-
-
-
-
-
-
-Understanding these clusters allows businesses to tailor their music offerings to enhance the customer experience. By aligning the musical atmosphere with the brand's identity and the desired mood, businesses can influence customer behavior, dwell time, and even spending habits. For streaming services, these clusters could inform recommendation algorithms, helping to surface songs that align with listeners' current activities or mood, thereby increasing user engagement and satisfaction. For artists and record labels, insights from these clusters can guide marketing strategies and track selection for albums or playlists, targeting the right audience with the right music.
-
+---
