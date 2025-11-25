@@ -1,13 +1,13 @@
 # Spotify Audio-Feature Explorer  
 
-👉 [**Live Demo**](https://mrbt03.shinyapps.io/spotify-clustering/)  
+[**Live Demo**](https://mrbt03.shinyapps.io/spotify-clustering/)  
 
 This project applies **unsupervised learning** to Spotify’s “audio DNA” (acousticness, energy, danceability, etc.) to reveal structure in music beyond genre labels.  
 Deliverables include both a **reproducible R analysis** and an **interactive Shiny dashboard** for exploration, playlist curation, and cluster diagnostics.  
 
 ---
 
-## 🔑 Highlights
+## Highlights
 
 - **Dimensionality reduction:** PCA distilled 10 audio features into 3 interpretable axes:  
   1. Acoustic ↔ Energy  
@@ -20,7 +20,7 @@ Deliverables include both a **reproducible R analysis** and an **interactive Shi
 
 ---
 
-## 📊 Data
+## Data
 
 - **Source:** Spotify track-level audio features (`spotifyfeatures.csv`)  
 - **Variables:** 10 numeric features (danceability, valence, tempo, loudness, etc.)  
@@ -28,7 +28,7 @@ Deliverables include both a **reproducible R analysis** and an **interactive Shi
 
 ---
 
-## ⚙️ Methods
+## Methods
 
 ### Principal Component Analysis (PCA)
 - Scree plots, VSS/MAP diagnostics, and rotation (Varimax & Promax) guided axis selection  
@@ -57,7 +57,7 @@ Deliverables include both a **reproducible R analysis** and an **interactive Shi
 
 ---
 
-## 📌 Example Insights
+## Example Insights
 
 - **Explainable controls:** Axes map directly to levers like *energy*, *groove*, and *live feel*, enabling transparent playlist design  
 - **Actionable segmentation:** Spoken-word skits/podcasts separated cleanly from mainstream pop — useful for filtering or targeting content  
